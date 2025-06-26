@@ -1,40 +1,47 @@
-#import youtube-dl
-from __future__ import unicode_literals
-import yt_dlp
+# filepath: [VideoDownload.py](http://_vscodecontentref_/0)
+from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from yt_dlp import YoutubeDL
+from googlesearch import search
 
-#import PyUsb
-import usb
+HOME = Path(r"C:\Users\Andre\OneDrive\Documents\Clone Hero\Songs")
+YDL_OPTS = {
+    "nooverwrites": False,
+    "noplaylist": True,
+    # format could be parameterized per‐quality
+}
 
-#import google search
-try: 
-    from googlesearch import search 
-except ImportError:  
-    print("No module named 'google' found") 
+def find_song_dirs(base: Path):
+    return [p for p in base.iterdir() if p.is_dir()]
 
-import os 
+def get_youtube_url(song_name: str) -> str | None:
+    query = f"Youtube {song_name} (Official Music Video)"
+    return next(search(query, tld="com", lang="en", num=1, stop=1), None)
 
-#CHANGE THE HOME FOLDER TO THE FOLDER PATH YOU WANT TO DOWNLOAD SONGS FOR
-homeFolder = "D:\Songs"
-os.chdir(homeFolder)
-print(os.getcwd())
+def download_to_folder(folder: Path, url: str):
+    opts = YDL_OPTS.copy()
+    opts["outtmpl"] = str(folder / "video.mp4")
+    with YoutubeDL(opts) as ydl:
+        ydl.download([url])
 
+def process_folder(folder: Path) -> tuple[str,bool]:
+    url = get_youtube_url(folder.name)
+    if not url:
+        return folder.name, False
+    try:
+        download_to_folder(folder, url)
+        return folder.name, True
+    except Exception:
+        return folder.name, False
 
-for file in os.listdir():
-	query = 'Youtube {} (Official Music Video)'.format(file)
+def main():
+    folders = find_song_dirs(HOME)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = {pool.submit(process_folder, f): f.name for f in folders}
+        for fut in as_completed(futures):
+            name, ok = fut.result()
+            status = "✅" if ok else "❌"
+            print(f"{status} {name}")
 
-	#scrapes the URL from google
-	for j in search(query, tld="com", lang='en', num=1, start=0, stop=1):
-		url = j;
-
-	#changes the download folder
-	currentSongFileFolder = '{}/{}'.format(homeFolder, file)
-	os.chdir(currentSongFileFolder)
-
-	#downloads the song in the correct folder
-	#IN THE FUTURE ADD 'format': 'bestaudio/best' TO ydl_opts (so that quality can be improved)
-	ydl_opts = {'outtmpl': 'video.mp4',
-				'nooverwrites': 0,
-				'noplaylist': 1}
-	with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-	    ydl.download([url])
-	
+if __name__ == "__main__":
+    main()
